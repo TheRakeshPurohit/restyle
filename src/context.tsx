@@ -1,12 +1,9 @@
 import React from 'react';
 import {BaseTheme} from 'types';
 
-import {DimensionsProvider} from './hooks/useDimensions';
-
 export const ThemeContext = React.createContext({
   colors: {},
   spacing: {},
-  breakpoints: {},
 });
 
 export const ThemeProvider = ({
@@ -15,8 +12,4 @@ export const ThemeProvider = ({
 }: {
   theme: BaseTheme;
   children: React.ReactNode;
-}) => (
-  <ThemeContext.Provider value={theme}>
-    <DimensionsProvider>{children}</DimensionsProvider>
-  </ThemeContext.Provider>
-);
+}) => <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;

@@ -1,6 +1,6 @@
 import React from 'react';
-import {create as render, act} from 'react-test-renderer';
-import {View, Dimensions, ViewProps} from 'react-native';
+import {create as render} from 'react-test-renderer';
+import {View, ViewProps} from 'react-native';
 
 import createRestyleComponent from '../createRestyleComponent';
 import {
@@ -8,6 +8,8 @@ import {
   BackgroundColorProps,
   SpacingProps,
   spacing,
+  SpacingShorthandProps,
+  spacingShorthand,
   OpacityProps,
   opacity,
 } from '../restyleFunctions';
@@ -45,53 +47,57 @@ const themeWithVariant = {
     },
   },
 };
+
+const {breakpoints, ...themeWithoutBreakpoints} = theme;
+
 type Theme = typeof theme;
 type ThemeWithVariant = typeof themeWithVariant;
 
-jest.mock('react-native', () => {
-  return Object.setPrototypeOf(
-    {
-      Dimensions: {
-        get: () => ({
-          width: 375,
-          height: 667,
-        }),
-        addEventListener: jest.fn(() => ({remove: () => {}})),
-        removeEventListener: jest.fn(),
-      },
-    },
-    jest.requireActual('react-native'),
-  );
-});
+const mockUseWindowDimensions = jest.fn();
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  default: mockUseWindowDimensions,
+}));
 
 const Component = createRestyleComponent<
   BackgroundColorProps<Theme> &
     SpacingProps<Theme> &
+    SpacingShorthandProps<Theme> &
     OpacityProps<Theme> &
     ViewProps,
   Theme
->([backgroundColor, spacing, opacity]);
+>([backgroundColor, spacing, spacingShorthand, opacity]);
 const cardVariant = createVariant<ThemeWithVariant, 'cardVariants'>({
   themeKey: 'cardVariants',
 });
 const ComponentWithVariant = createRestyleComponent<
   BackgroundColorProps<ThemeWithVariant> &
     SpacingProps<ThemeWithVariant> &
+    SpacingShorthandProps<Theme> &
     OpacityProps<ThemeWithVariant> &
     VariantProps<ThemeWithVariant, 'cardVariants'> &
     ViewProps,
   ThemeWithVariant
->([backgroundColor, spacing, opacity, cardVariant]);
+>([backgroundColor, spacing, spacingShorthand, opacity, cardVariant]);
 
 describe('createRestyleComponent', () => {
   describe('creates a component that', () => {
     beforeEach(() => {
-      (Dimensions.addEventListener as jest.Mock).mockClear();
+      mockUseWindowDimensions.mockReturnValue({width: 375, height: 667});
     });
 
     it('passes styles based on the given props', () => {
       const {root} = render(
         <ThemeProvider theme={theme}>
+          <Component opacity={0.5} />
+        </ThemeProvider>,
+      );
+      expect(root.findByType(View).props.style).toStrictEqual([{opacity: 0.5}]);
+    });
+
+    it('passes styles based on the given props for theme without breakpoints', () => {
+      const {root} = render(
+        <ThemeProvider theme={themeWithoutBreakpoints}>
           <Component opacity={0.5} />
         </ThemeProvider>,
       );
@@ -133,8 +139,7 @@ describe('createRestyleComponent', () => {
       });
     });
 
-    it('re-renders with styles specific to the screen size when dimensions change', async () => {
-      (Dimensions.addEventListener as jest.Mock).mockClear();
+    it('renders with phone-specific style', async () => {
       const {root} = render(
         <ThemeProvider theme={theme}>
           <Component opacity={{phone: 0.5, tablet: 0.8}} />
@@ -144,14 +149,19 @@ describe('createRestyleComponent', () => {
         style: [{opacity: 0.5}],
       });
       await new Promise(resolve => setTimeout(resolve, 0));
-      const {calls} = (Dimensions.addEventListener as jest.Mock).mock;
-      const onChange = calls[calls.length - 1][1];
-      act(() => {
-        onChange({window: {width: 768, height: 1024}});
-      });
+    });
+
+    it('renders with tablet-specific style when dimensions are bigger', async () => {
+      mockUseWindowDimensions.mockReturnValue({width: 768, height: 1024});
+      const {root} = render(
+        <ThemeProvider theme={theme}>
+          <Component opacity={{phone: 0.5, tablet: 0.8}} />
+        </ThemeProvider>,
+      );
       expect(root.findByType(View).props).toStrictEqual({
         style: [{opacity: 0.8}],
       });
+      await new Promise(resolve => setTimeout(resolve, 0));
     });
 
     it('forwards refs', () => {
@@ -197,6 +207,28 @@ describe('createRestyleComponent', () => {
           margin: 8,
         },
       ]);
+    });
+
+    it('uses gap values from the theme', () => {
+      const {root} = render(
+        <ThemeProvider theme={theme}>
+          <Component gap="s" columnGap="s" rowGap="s" />
+        </ThemeProvider>,
+      );
+      expect(root.findByType(View).props).toStrictEqual({
+        style: [{gap: 8, columnGap: 8, rowGap: 8}],
+      });
+    });
+
+    it('passes gap shorthands as gap values', () => {
+      const {root} = render(
+        <ThemeProvider theme={theme}>
+          <Component g="s" cg="s" rg="s" />
+        </ThemeProvider>,
+      );
+      expect(root.findByType(View).props).toStrictEqual({
+        style: [{gap: 8, columnGap: 8, rowGap: 8}],
+      });
     });
   });
 });
